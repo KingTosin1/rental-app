@@ -1,45 +1,83 @@
 FROM php:8.2-cli
 
-# Install system dependencies
+# =========================
+# SYSTEM DEPENDENCIES
+# =========================
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     unzip \
+    zip \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
-    zip \
     libzip-dev
 
-# Install PHP extensions required by Laravel
-RUN docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
+# =========================
+# PHP EXTENSIONS
+# =========================
+RUN docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    zip
 
-# Install Composer
+# =========================
+# COMPOSER
+# =========================
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Set working directory
+# =========================
+# WORKDIR
+# =========================
 WORKDIR /var/www
 
-# Copy project files
+# =========================
+# COPY PROJECT
+# =========================
 COPY . .
 
-# Install dependencies
+# =========================
+# ENV FORCE (VERY IMPORTANT)
+# prevents SQLite fallback issues
+# =========================
+ENV DB_CONNECTION=mysql
+
+# =========================
+# INSTALL DEPENDENCIES
+# =========================
 RUN composer install --no-dev --optimize-autoloader
 
-# Fix Laravel required folders + permissions (IMPORTANT)
+# =========================
+# LARAVEL STORAGE FIX
+# =========================
 RUN mkdir -p storage/framework/cache \
     && mkdir -p storage/framework/sessions \
     && mkdir -p storage/framework/views \
     && mkdir -p bootstrap/cache \
     && chmod -R 777 storage bootstrap/cache
 
-# Cache clear (safe for production build)
-RUN php artisan config:clear || true
-RUN php artisan cache:clear || true
-RUN php artisan view:clear || true
+# =========================
+# CLEAR ALL CACHES (CRITICAL FIX)
+# =========================
+RUN php artisan optimize:clear || true
 
-# Expose Render port
+# Remove cached config if it exists
+RUN rm -f bootstrap/cache/config.php || true
+
+# Re-cache config safely
+RUN php artisan config:cache || true
+
+# =========================
+# EXPOSE PORT (RENDER)
+# =========================
 EXPOSE 10000
 
-# Start Laravel
+# =========================
+# START SERVER
+# =========================
 CMD php artisan serve --host=0.0.0.0 --port=10000
